@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ECUS5 IDA – Keyword Extractor</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:#070a0f;font-family:'Courier New',monospace;color:#e0e6ef}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,194,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,194,255,.022) 1px,transparent 1px);
+  background-size:44px 44px;z-index:0}
+#app{position:relative;max-width:1100px;margin:0 auto;padding:28px 18px;z-index:1}
+
+/* header */
+.hdr{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.hdr-badge{width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,#00C2FF,#A259FF);
+  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:#fff;letter-spacing:-1px;flex-shrink:0}
+.hdr h1{font-size:17px;font-weight:700;letter-spacing:2px;color:#fff;margin-bottom:2px}
+.hdr p{font-size:11px;color:#2a3a4a;letter-spacing:1px}
+
+/* upload area */
+.upload-wrap{display:grid;grid-template-columns:1fr 110px;gap:12px;margin-bottom:18px}
+#drop-zone{border:2px dashed #1a2838;border-radius:10px;padding:16px 18px;cursor:pointer;
+  background:rgba(255,255,255,.01);transition:all .2s;min-height:68px;display:flex;align-items:center}
+#drop-zone.drag{border-color:#00C2FF;background:rgba(0,194,255,.04)}
+#drop-zone .placeholder{display:flex;align-items:center;gap:12px;color:#2a3a4a}
+#drop-zone .placeholder .ico{font-size:22px}
+#drop-zone .placeholder .t1{color:#00C2FF;font-size:13px;font-weight:600}
+#drop-zone .placeholder .t2{font-size:11px;margin-top:2px}
+.file-chips{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.chip{display:flex;align-items:center;gap:5px;background:#0d1a24;border:1px solid #1a2838;
+  border-radius:6px;padding:4px 9px;font-size:11px}
+.chip span{color:#90aabf}
+.chip button{background:none;border:none;cursor:pointer;color:#3d5060;font-size:13px;padding:0;line-height:1}
+.more-hint{font-size:10px;color:#1e2a38}
+#extract-btn{border-radius:10px;border:none;background:linear-gradient(135deg,#00C2FF,#A259FF);
+  color:#fff;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;
+  font-family:'Courier New',monospace;transition:all .2s;white-space:pre-line;line-height:1.6;padding:0 8px}
+#extract-btn:disabled{background:#1a2838;color:#3d5060;cursor:not-allowed}
+
+/* error */
+.err{background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.27);border-radius:8px;
+  padding:12px;margin-bottom:14px;color:#ff6b6b;font-size:13px;display:none}
+
+/* tabs */
+#tabs-bar{display:flex;gap:3px;overflow-x:auto;padding-bottom:0}
+.tab-btn{padding:8px 13px;border-radius:7px 7px 0 0;border:1px solid #1a2838;border-bottom:none;
+  background:#070a0f;color:#3d5060;font-size:10px;font-weight:700;cursor:pointer;
+  letter-spacing:.5px;font-family:'Courier New',monospace;white-space:nowrap;transition:all .15s}
+.tab-btn.active{border-bottom:1px solid #0b1015;background:#0b1015}
+.tab-count{margin-left:5px;font-size:10px;opacity:.5}
+
+/* panel */
+#panel{background:#0b1015;border-radius:0 8px 8px 8px;padding:20px;display:none}
+.panel-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.panel-title{font-size:11px;font-weight:700;letter-spacing:1.5px}
+.panel-hint{font-size:10px;color:#2a3a4a;margin-top:3px}
+.copy-tab-btn{border-radius:5px;padding:5px 13px;font-size:10px;cursor:pointer;
+  letter-spacing:1px;font-family:'Courier New',monospace;white-space:nowrap;border-width:1px;border-style:solid}
+
+.group-title{font-size:10px;font-weight:700;letter-spacing:1.8px;margin-bottom:10px;
+  padding-bottom:5px;border-bottom-width:1px;border-bottom-style:solid;opacity:.7}
+.group-wrap{margin-bottom:24px}
+.group-wrap:last-child{margin-bottom:0}
+
+table{width:100%;border-collapse:collapse}
+tr:nth-child(even){background:rgba(255,255,255,.012)}
+td{padding:8px 12px;vertical-align:top}
+td.label-col{width:240px}
+.field-label{font-size:12px;color:#4a6070}
+.field-note{font-size:10px;color:#1e2a38;margin-top:2px;font-style:italic;line-height:1.4}
+td.val-col{vertical-align:middle}
+.val-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.val-text{color:#e0e6ef;font-weight:700}
+.val-empty{color:#1e2a38}
+.tag{border-radius:4px;padding:2px 8px;font-size:11px;font-style:italic;white-space:nowrap;border-width:1px;border-style:solid}
+.tag-hq{background:#120e2a;color:#7c6fff;border-color:rgba(108,99,255,.2)}
+.tag-tra{background:#0c1e0c;color:#7ecb7a;border-color:rgba(76,175,80,.2)}
+.tag-suyra{background:#081e12;color:#00E5A0;border-color:rgba(0,229,160,.2)}
+.copy-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:0;line-height:1;transition:color .2s;color:#3d5060}
+.copy-btn.done{color:#00E5A0}
+
+/* legend */
+#legend{display:flex;gap:18px;margin-top:12px;flex-wrap:wrap}
+.leg{font-size:10px}
+
+/* empty state */
+#empty{border:1px solid #1a2838;border-radius:10px;padding:44px 0;text-align:center;color:#2a3a4a;font-size:13px}
+.footer{font-size:10px;color:#111820;text-align:center;margin-top:26px;letter-spacing:1px}
+
+/* loading spinner */
+#loading-overlay{display:none;position:fixed;inset:0;background:rgba(7,10,15,.7);
+  z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+#loading-overlay.show{display:flex}
+.spinner{width:36px;height:36px;border:3px solid #1a2838;border-top-color:#00C2FF;
+  border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{color:#00C2FF;font-size:13px;letter-spacing:2px}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text">ĐANG PHÂN TÍCH...</div>
+</div>
+
+<div id="app">
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-badge">IDA</div>
+    <div>
+      <h1>ECUS5 <span style="color:#00C2FF">NHẬP KHẨU</span> <span style="color:#3d5060;font-size:13px">– IDA KEYWORD EXTRACTOR</span></h1>
+      <p>Upload chứng từ NK → AI extract → Sẵn sàng key vào ECUS5-VNACCS 2018</p>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div class="upload-wrap">
+    <div id="drop-zone">
+      <input type="file" id="file-input" multiple accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.txt,.csv" style="display:none"/>
+      <div class="placeholder" id="placeholder-ui">
+        <span class="ico">📂</span>
+        <div>
+          <div class="t1">Kéo thả hoặc click chọn chứng từ NK</div>
+          <div class="t2">Invoice · B/L · Packing List · A/N · C/O</div>
+        </div>
+      </div>
+      <div class="file-chips" id="chips-ui" style="display:none;width:100%"></div>
+    </div>
+    <button id="extract-btn" disabled onclick="analyze()">⚡&#10;EXTRACT&#10;DATA</button>
+  </div>
+
+  <div class="err" id="err-box"></div>
+
+  <!-- RESULTS (hidden until data) -->
+  <div id="results" style="display:none">
+    <div id="tabs-bar"></div>
+    <div id="panel">
+      <div class="panel-hdr">
+        <div>
+          <div class="panel-title" id="panel-title"></div>
+          <div class="panel-hint" id="panel-hint"></div>
+        </div>
+        <button class="copy-tab-btn" id="copy-tab-btn" onclick="copyTab()">📋 COPY TAB</button>
+      </div>
+      <div id="panel-body"></div>
+    </div>
+    <div id="legend">
+      <span class="leg" style="color:#e0e6ef">⎘ Giá trị – click copy</span>
+      <span class="leg" style="color:#00E5A0">↩ Suy ra từ chứng từ</span>
+      <span class="leg" style="color:#7ecb7a">📌 Cần tra / bổ sung thêm</span>
+      <span class="leg" style="color:#7c6fff">🔒 HQ / Hệ thống tự cấp</span>
+      <span class="leg" style="color:#2a3a4a">— Không tìm thấy</span>
+    </div>
+  </div>
+
+  <div id="empty">Upload chứng từ nhập khẩu và bấm ⚡ EXTRACT để bắt đầu</div>
+  <div class="footer">ECUS5 IDA KEYWORD EXTRACTOR · AI-POWERED · 2025</div>
+</div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────────────
+const TABS = [
+  {
+    id:"ttchung1",label:"Thông tin chung 1",color:"#00C2FF",icon:"📋",
+    hint:"Tab đầu tiên khi mở tờ khai IDA – thông tin khai báo + vận đơn + vận chuyển",
+    groups:[
+      {title:"🔷 Khai báo cơ bản",fields:[
+        {key:"maLoaiHinh",label:"Mã loại hình",note:"A11: NK kinh doanh CK / A12: NK kinh doanh nội địa / E21: NK NL gia công / E31: NK NL SXXK…"},
+        {key:"coQuanHQ",label:"Cơ quan hải quan (mã)",note:"VD: 02CI – Cát Lái; 02CIS01 – Tân Cảng SG-2; 02PM – Phú Mỹ"},
+        {key:"maBoPhanXuLy",label:"Mã bộ phận xử lý",note:"01 – Đội thủ tục hàng nhập; 02 – Đội thủ tục hàng xuất"},
+        {key:"phanLoaiCaNhanToChuc",label:"Phân loại cá nhân / tổ chức",note:"Thường chọn 4 – Hàng hóa từ tổ chức đến tổ chức"},
+        {key:"maDaiLyHQ",label:"Mã đại lý hải quan",note:"5 ký tự đầu User ID VNACCS của đại lý – chỉ nhập nếu thuê đại lý khai thay"},
+      ]},
+      {title:"🔷 Thông tin người nhập khẩu (tự động)",fields:[
+        {key:"tenNK",label:"Tên người nhập khẩu",note:"Tự nhảy khi chọn doanh nghiệp – IN HOA không dấu"},
+        {key:"mstNK",label:"MST người nhập khẩu",note:"Tự nhảy"},
+        {key:"diaChiNK",label:"Địa chỉ người nhập khẩu",note:"Tự nhảy"},
+      ]},
+      {title:"🔷 Thông tin người xuất khẩu (Seller / Shipper)",fields:[
+        {key:"tenXK",label:"Tên người xuất khẩu",note:"Nhập theo hợp đồng mua bán – IN HOA không dấu"},
+        {key:"diaChiXK",label:"Địa chỉ người xuất khẩu",note:""},
+        {key:"quocGiaXK",label:"Quốc gia xuất khẩu",note:"VD: KR – Korea; CN – China; DE – Germany"},
+      ]},
+      {title:"🔷 Thông tin vận đơn (B/L)",fields:[
+        {key:"soVanDon",label:"Số vận đơn (B/L No.)",note:"Lấy từ B/L sau khi tàu chạy – bắt buộc"},
+        {key:"ngayVanDon",label:"Ngày vận đơn",note:"Ngày phát hành B/L"},
+        {key:"soDinhDanh",label:"Số định danh hàng hóa",note:"Hệ thống tự sinh = ngày vận đơn + số B/L (VD: 150619A079A)"},
+        {key:"soKien",label:"Số lượng kiện",note:"Tổng số kiện / carton – xem trên B/L"},
+        {key:"grossWeight",label:"Gross weight (kg)",note:"Xem trên B/L hoặc Packing List"},
+      ]},
+      {title:"🔷 Phương tiện & hành trình vận chuyển",fields:[
+        {key:"maHieuPTVC",label:"Mã hiệu phương thức vận chuyển",note:"1–Hàng không / 2–Đường biển nguyên cont / 3–Đường biển lẻ CFS / 5–Đường bộ…"},
+        {key:"tenTau",label:"Tên tàu / phương tiện",note:"Ví dụ: ONE INNOVATION"},
+        {key:"soChuyenTau",label:"Số chuyến tàu (Voyage)",note:"VD: 009W"},
+        {key:"ngayHangDen",label:"Ngày hàng đến (ETA)",note:"Xem trên A/N (Arrival Notice) từ hãng tàu"},
+        {key:"diaDiemDo",label:"Địa điểm dỡ hàng (POD)",note:"Cảng đến ở VN – VD: VNSGN – Cát Lái"},
+        {key:"diaDiemXep",label:"Địa điểm xếp hàng (POL)",note:"Cảng xuất ở nước ngoài – VD: KRPUS – Busan"},
+        {key:"soLuongCont",label:"Số lượng container",note:"VD: 1"},
+        {key:"diaDiemLuuKho",label:"Mã địa điểm lưu kho (ICD/CFS)",note:"Chọn kho dự kiến lưu hàng chờ thông quan"},
+        {key:"diaDiemDichVC",label:"Địa điểm đích vận chuyển bảo thuế",note:"Chỉ nhập nếu khai khác chi cục – VD: 02PGCPG"},
+      ]},
+    ]
+  },
+  {
+    id:"ttchung2",label:"Thông tin chung 2",color:"#A259FF",icon:"📄",
+    hint:"Tab 2 – Hóa đơn, trị giá, phí vận chuyển, thuế & bảo lãnh, ghi chú",
+    groups:[
+      {title:"🔷 Hợp đồng mua bán",fields:[
+        {key:"soHopDong",label:"Số hợp đồng",note:"Không bắt buộc – HQ không yêu cầu trình HĐ khi mở TK; nhập để quản lý nội bộ"},
+        {key:"ngayHopDong",label:"Ngày hợp đồng",note:""},
+      ]},
+      {title:"🔷 Giấy phép nhập khẩu",fields:[
+        {key:"soGiayPhep",label:"Số giấy phép / văn bản",note:"Chỉ nhập nếu hàng bắt buộc có GP nhập khẩu (dược, hóa chất, vũ khí…)"},
+        {key:"ngayGiayPhep",label:"Ngày cấp giấy phép",note:""},
+        {key:"coQuanCapGP",label:"Cơ quan cấp giấy phép",note:""},
+      ]},
+      {title:"🔷 Hóa đơn thương mại (Commercial Invoice)",fields:[
+        {key:"phanLoaiHoaDon",label:"Phân loại hình thức hóa đơn",note:"A – Có hóa đơn thương mại (phổ biến nhất)"},
+        {key:"maPLGiaHD",label:"Mã phân loại giá hóa đơn",note:"A – Giá hóa đơn hàng phải trả tiền (thông thường)"},
+        {key:"soHoaDon",label:"Số hóa đơn (Invoice No.)",note:""},
+        {key:"ngayHoaDon",label:"Ngày phát hành hóa đơn",note:""},
+        {key:"dieuKienGia",label:"Điều kiện giá (Incoterm)",note:"FOB / CIF / EXW / CNF… – lấy từ Invoice"},
+        {key:"triGiaHoaDon",label:"Trị giá hóa đơn (ngoại tệ)",note:"Lấy từ Total Amount trên Invoice"},
+        {key:"donViTienTe",label:"Đơn vị tiền tệ",note:"USD / EUR / KRW…"},
+        {key:"phuongThucTT",label:"Phương thức thanh toán",note:"LC – L/C / KC – Khác (bao gồm T/T) / TT thì chọn KC"},
+      ]},
+      {title:"🔷 Tờ khai trị giá (Valuation)",fields:[
+        {key:"maPLTriGia",label:"Mã phân loại trị giá",note:"6 – Áp dụng phương pháp trị giá giao dịch (phổ biến nhất)"},
+        {key:"phiVanChuyen",label:"Phí vận chuyển (Freight)",note:"Nhập nếu điều kiện FOB – lấy từ invoice cước hoặc hãng tàu; CIF thì bỏ trống"},
+        {key:"phiBaoHiem",label:"Phí bảo hiểm (Insurance)",note:"Nhập nếu có mua bảo hiểm riêng; CIF thì bỏ trống"},
+        {key:"dieuKienBH",label:"Điều kiện bảo hiểm",note:"Chỉ nhập nếu có phí BH – chọn điều kiện tương ứng"},
+        {key:"cacKhoanDieuChinh",label:"Các khoản điều chỉnh khác",note:"Chi phí đóng gói, hoa hồng môi giới… nếu có"},
+        {key:"tyGia",label:"Tỷ giá áp dụng",note:"Tỷ giá mua vào của Vietcombank ngày đăng ký TK – tra tại vietcombank.com.vn"},
+        {key:"triGiaTinhThue",label:"Trị giá tính thuế (VND)",note:"= (FOB + Freight + Insurance) × tỷ giá – hệ thống tự tính nếu nhập đủ"},
+      ]},
+      {title:"🔷 Thuế & Bảo lãnh",fields:[
+        {key:"nguoiNopThue",label:"Người nộp thuế",note:"1 – Người NK trực tiếp nộp; 2 – Nộp qua đại lý HQ"},
+        {key:"maXDThoiHanNopThue",label:"Mã xác định thời hạn nộp thuế",note:"D – Nộp ngay (phổ biến); các mã khác nếu có bảo lãnh"},
+        {key:"nganHangBaoLanh",label:"Ngân hàng bảo lãnh",note:"Chỉ nhập nếu có bảo lãnh thuế"},
+        {key:"soChungTuBL",label:"Số chứng từ bảo lãnh",note:"Chỉ nhập nếu có bảo lãnh thuế"},
+        {key:"loaiBaoLanh",label:"Loại bảo lãnh",note:"Chung hoặc riêng – chỉ nhập nếu có BL"},
+      ]},
+      {title:"🔷 Thông tin bổ sung & ghi chú",fields:[
+        {key:"soCO",label:"Số C/O (Certificate of Origin)",note:"Nhập nếu được hưởng ưu đãi thuế FTA (FORM E, D, AK, VK, AIFTA…)"},
+        {key:"ngayCO",label:"Ngày C/O",note:""},
+        {key:"loaiCO",label:"Loại C/O / Form",note:"VD: Form E – ASEAN-China; Form D – ASEAN; Form VK – VN-Korea"},
+        {key:"ghiChu",label:"Phần ghi chú",note:"Ghi số HĐ nếu HQ yêu cầu; các nội dung làm rõ khác"},
+      ]},
+    ]
+  },
+  {
+    id:"dsHang",label:"Danh sách hàng",color:"#FFB800",icon:"📦",
+    hint:"Tab 3 – Nhập chi tiết từng dòng hàng hóa; có thể nhập trực tiếp hoặc import Excel",
+    groups:[
+      {title:"🔷 Chi tiết từng dòng hàng (mỗi dòng = 1 item)",fields:[
+        {key:"tenHang",label:"Tên hàng hóa",note:"Đầy đủ bằng tiếng Anh như trên Invoice; bao gồm nhãn hiệu, model nếu có"},
+        {key:"nhanHieu",label:"Nhãn hiệu / Model",note:"VD: KNIPEX Modular X Tool Backpack"},
+        {key:"maHS",label:"Mã HS (8 số)",note:"Lấy từ Invoice; tra lại tại customs.gov.vn → tra cứu HS code"},
+        {key:"xuatXu",label:"Nước xuất xứ",note:"VD: KR – Korea; CN – China; DE – Germany"},
+        {key:"soLuong1",label:"Số lượng 1 (theo đơn vị tính HS)",note:"Đơn vị tính theo biểu thuế – thường là PCE/KGM/MTR…"},
+        {key:"donViTinh1",label:"Đơn vị tính 1",note:"PCE – cái / KGM – kg / SET – bộ / MTR – mét…"},
+        {key:"soLuong2",label:"Số lượng 2 (phụ – nếu có)",note:"Một số HS code yêu cầu khai thêm đơn vị tính thứ 2"},
+        {key:"donViTinh2",label:"Đơn vị tính 2 (phụ)",note:""},
+        {key:"donGiaHoaDon",label:"Đơn giá hóa đơn (ngoại tệ)",note:"Đơn giá trên Invoice"},
+        {key:"triGiaDongHang",label:"Trị giá dòng hàng (ngoại tệ)",note:"= số lượng × đơn giá"},
+      ]},
+      {title:"🔷 Thuế từng dòng hàng",fields:[
+        {key:"thueSuatNK",label:"Thuế suất nhập khẩu (%)",note:"Tra tại customs.gov.vn theo mã HS + nước xuất xứ; hưởng FTA nếu có C/O"},
+        {key:"thueSuatFTA",label:"Thuế suất FTA ưu đãi (%)",note:"Nếu có C/O hợp lệ – thường thấp hơn MFN"},
+        {key:"thueSuatVAT",label:"Thuế suất VAT (%)",note:"0% / 5% / 8% / 10% – tra theo mã HS"},
+        {key:"thueSuatTTDB",label:"Thuế TTĐB (%)",note:"Nếu hàng thuộc diện TTĐB (rượu, bia, xe, thuốc lá…)"},
+        {key:"thueSuatBVMT",label:"Thuế BVMT (%)",note:"Nếu hàng thuộc diện BVMT (túi ni-lông, than…)"},
+        {key:"tienThueSuatNK",label:"Tiền thuế NK phải nộp (VND)",note:"= trị giá tính thuế × thuế suất NK – hệ thống tự tính"},
+        {key:"tienVAT",label:"Tiền thuế VAT phải nộp (VND)",note:"= (trị giá tính thuế + thuế NK + TTĐB) × VAT – tự tính"},
+      ]},
+      {title:"🔷 Tổng hợp lô hàng",fields:[
+        {key:"tongSoLuong",label:"Tổng số lượng",note:""},
+        {key:"tongTriGiaHD",label:"Tổng trị giá hóa đơn (ngoại tệ)",note:""},
+        {key:"tongThueSuatNK",label:"Tổng tiền thuế NK (VND)",note:""},
+        {key:"tongVAT",label:"Tổng tiền VAT (VND)",note:""},
+        {key:"tongThuPhaiNop",label:"Tổng thuế + phí phải nộp (VND)",note:""},
+      ]},
+    ]
+  },
+  {
+    id:"ttCont",label:"Thông tin container",color:"#00E5A0",icon:"🚢",
+    hint:"Khai sau khi Ghi tờ khai – nhập số container & seal để HQ đối chiếu",
+    groups:[
+      {title:"🔷 Chi tiết container (mỗi dòng = 1 container)",fields:[
+        {key:"soCont",label:"Số container",note:"VD: YMMU6628347 – lấy từ A/N hoặc MV / danh sách container HQ"},
+        {key:"loaiCont",label:"Loại container",note:"40HQ / 40DC / 20DC / 45HC…"},
+        {key:"sealHangTau",label:"Seal hãng tàu",note:"Lấy từ B/L / A/N; NA nếu không có"},
+        {key:"sealHQ",label:"Seal hải quan",note:"HQ điền khi niêm phong thực tế – không tự điền"},
+        {key:"tinhTrangCont",label:"Tình trạng container",note:"Full (nguyên cont) / LCL (hàng lẻ)"},
+      ]},
+    ]
+  },
+  {
+    id:"chungTu",label:"Chứng từ đính kèm",color:"#FF6B6B",icon:"📎",
+    hint:"Khai sau khi có số TK – đính kèm chứng từ điện tử qua nghiệp vụ HYS hoặc nộp bản giấy khi mở TK",
+    groups:[
+      {title:"🔷 Chứng từ bắt buộc",fields:[
+        {key:"ctInvoice",label:"Commercial Invoice",note:"Bắt buộc – tên file + số Invoice"},
+        {key:"ctPackingList",label:"Packing List",note:"Bắt buộc"},
+        {key:"ctBL",label:"Bill of Lading (B/L)",note:"Bắt buộc – Original hoặc Telex Release / Surrender"},
+        {key:"ctArrivalNotice",label:"Arrival Notice (A/N)",note:"Lấy từ hãng tàu / forwarder khi hàng về"},
+      ]},
+      {title:"🔷 Chứng từ điều kiện (tuỳ loại hàng)",fields:[
+        {key:"ctCO",label:"C/O (Giấy chứng nhận xuất xứ)",note:"Cần nếu muốn hưởng thuế suất FTA ưu đãi"},
+        {key:"ctGiayPhep",label:"Giấy phép nhập khẩu",note:"Nếu hàng thuộc danh mục phải có GP"},
+        {key:"ctKiemDich",label:"Giấy chứng nhận kiểm dịch",note:"Động thực vật, thực phẩm, thiết bị y tế…"},
+        {key:"ctKiemChuanCL",label:"Giấy chứng nhận chất lượng",note:"Một số nhóm hàng phải kiểm tra CL trước thông quan"},
+        {key:"ctCatalog",label:"Catalogue / Tài liệu kỹ thuật",note:"Nếu HQ yêu cầu xác định loại hàng / mã HS"},
+        {key:"ctHopDong",label:"Hợp đồng mua bán",note:"Nộp khi HQ yêu cầu hoặc kiểm tra chuyên sâu"},
+      ]},
+    ]
+  },
+  {
+    id:"kqHQ",label:"Kết quả HQ / Quản lý",color:"#FF9A3C",icon:"✅",
+    hint:"Thông tin do hệ thống VNACCS trả về sau khi IDA – không tự điền",
+    groups:[
+      {title:"🔷 Kết quả phân luồng & thông quan (hệ thống tự trả)",fields:[
+        {key:"soTK",label:"Số tờ khai",note:"Hệ thống VNACCS cấp sau khi IDA thành công"},
+        {key:"ngayDangKyTK",label:"Ngày đăng ký tờ khai",note:"Tự sinh"},
+        {key:"luong",label:"Phân luồng",note:"Xanh – thông quan ngay / Vàng – kiểm tra hồ sơ / Đỏ – kiểm tra thực tế"},
+        {key:"trangThaiTK",label:"Trạng thái tờ khai",note:"Thông quan / Chờ bổ sung / Từ chối…"},
+        {key:"ngayThongQuan",label:"Ngày thông quan",note:"HQ xác nhận sau khi kiểm tra xong"},
+        {key:"soQLHH",label:"Số quản lý hàng hóa (QLHH)",note:"Dùng để đối chiếu với bảng kê cont tại cảng"},
+        {key:"congChucHQ",label:"Công chức HQ tiếp nhận",note:"Tên / mã công chức – HQ điền"},
+      ]},
+      {title:"🔷 Quản lý nội bộ",fields:[
+        {key:"tenNguoiKhai",label:"Tên người khai báo",note:"Nhân viên XNK hoặc đại lý HQ thực hiện khai"},
+        {key:"ngayHetHanTK",label:"Ngày hết hạn làm thủ tục",note:"= ngày đăng ký + số ngày ân hạn theo loại hình"},
+        {key:"ghiChuQL",label:"Ghi chú nội bộ",note:"Tóm tắt lô hàng để tra cứu nhanh"},
+      ]},
+    ]
+  },
+];
+
+const SYSTEM_PROMPT = `Bạn là chuyên gia hải quan Việt Nam, chuyên đọc chứng từ nhập khẩu (Import) và extract dữ liệu để khai vào phần mềm ECUS5-VNACCS 2018, form tờ khai nhập khẩu IDA.
+
+QUY TẮC ĐIỀN GIÁ TRỊ:
+- Tìm thấy chính xác trong chứng từ → điền giá trị thực
+- Có thể suy ra từ dữ liệu trong chứng từ → điền + thêm " [suy ra]" phía sau
+- Không có nhưng biết cách tìm → "[Tra: <hướng dẫn ngắn 1 dòng>]"
+- Hệ thống VNACCS tự sinh / HQ cung cấp sau khi IDA → "[HQ/Hệ thống]"
+- Trường không bắt buộc và không có dữ liệu → ""
+
+Trả về JSON THUẦN TÚY không có markdown hay giải thích:
+{"maLoaiHinh":"","coQuanHQ":"","maBoPhanXuLy":"","phanLoaiCaNhanToChuc":"","maDaiLyHQ":"","tenNK":"","mstNK":"","diaChiNK":"","tenXK":"","diaChiXK":"","quocGiaXK":"","soVanDon":"","ngayVanDon":"","soDinhDanh":"","soKien":"","grossWeight":"","maHieuPTVC":"","tenTau":"","soChuyenTau":"","ngayHangDen":"","diaDiemDo":"","diaDiemXep":"","soLuongCont":"","diaDiemLuuKho":"","diaDiemDichVC":"","soHopDong":"","ngayHopDong":"","soGiayPhep":"","ngayGiayPhep":"","coQuanCapGP":"","phanLoaiHoaDon":"","maPLGiaHD":"","soHoaDon":"","ngayHoaDon":"","dieuKienGia":"","triGiaHoaDon":"","donViTienTe":"","phuongThucTT":"","maPLTriGia":"","phiVanChuyen":"","phiBaoHiem":"","dieuKienBH":"","cacKhoanDieuChinh":"","tyGia":"","triGiaTinhThue":"","nguoiNopThue":"","maXDThoiHanNopThue":"","nganHangBaoLanh":"","soChungTuBL":"","loaiBaoLanh":"","soCO":"","ngayCO":"","loaiCO":"","ghiChu":"","tenHang":"","nhanHieu":"","maHS":"","xuatXu":"","soLuong1":"","donViTinh1":"","soLuong2":"","donViTinh2":"","donGiaHoaDon":"","triGiaDongHang":"","thueSuatNK":"","thueSuatFTA":"","thueSuatVAT":"","thueSuatTTDB":"","thueSuatBVMT":"","tienThueSuatNK":"","tienVAT":"","tongSoLuong":"","tongTriGiaHD":"","tongThueSuatNK":"","tongVAT":"","tongThuPhaiNop":"","soCont":"","loaiCont":"","sealHangTau":"","sealHQ":"","tinhTrangCont":"","ctInvoice":"","ctPackingList":"","ctBL":"","ctArrivalNotice":"","ctCO":"","ctGiayPhep":"","ctKiemDich":"","ctKiemChuanCL":"","ctCatalog":"","ctHopDong":"","soTK":"","ngayDangKyTK":"","luong":"","trangThaiTK":"","ngayThongQuan":"","soQLHH":"","congChucHQ":"","tenNguoiKhai":"","ngayHetHanTK":"","ghiChuQL":""}`;
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let files = [];
+let result = null;
+let activeTab = "ttchung1";
+let copiedKey = null;
+
+// ─── FILE HANDLING ────────────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const placeholder = document.getElementById('placeholder-ui');
+const chipsUI   = document.getElementById('chips-ui');
+const extractBtn = document.getElementById('extract-btn');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => addFiles(e.target.files));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); addFiles(e.dataTransfer.files); });
+
+function addFiles(list) {
+  const arr = Array.from(list);
+  const ex = new Set(files.map(f => f.name));
+  files = [...files, ...arr.filter(f => !ex.has(f.name))];
+  renderChips();
+  extractBtn.disabled = files.length === 0;
+}
+
+function removeFile(name) {
+  files = files.filter(f => f.name !== name);
+  renderChips();
+  extractBtn.disabled = files.length === 0;
+}
+
+function fileIcon(name) {
+  const e = name.split('.').pop().toLowerCase();
+  if (e==='pdf') return '📄';
+  if (['xlsx','xls'].includes(e)) return '📊';
+  if (['png','jpg','jpeg'].includes(e)) return '🖼️';
+  return '📎';
+}
+
+function renderChips() {
+  if (files.length === 0) {
+    placeholder.style.display = 'flex';
+    chipsUI.style.display = 'none';
+    chipsUI.innerHTML = '';
+    return;
+  }
+  placeholder.style.display = 'none';
+  chipsUI.style.display = 'flex';
+  chipsUI.innerHTML = files.map(f => `
+    <div class="chip">
+      <span>${fileIcon(f.name)}</span>
+      <span>${f.name}</span>
+      <button onclick="event.stopPropagation();removeFile('${f.name.replace(/'/g,"\\'")}')">×</button>
+    </div>
+  `).join('') + '<span class="more-hint">+ click thêm</span>';
+}
+
+// ─── ANALYZE ─────────────────────────────────────────────────────────────────
+const toB64  = f => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(f); });
+const toText = f => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsText(f); });
+
+async function analyze() {
+  if (!files.length) return;
+  document.getElementById('loading-overlay').classList.add('show');
+  document.getElementById('err-box').style.display = 'none';
+  result = null;
+
+  try {
+    const parts = [];
+    for (const f of files) {
+      const ext = f.name.split('.').pop().toLowerCase();
+      if (ext === 'pdf') {
+        parts.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data: await toB64(f) }});
+        parts.push({ type:'text', text:`[File PDF: ${f.name}]` });
+      } else if (['png','jpg','jpeg','webp'].includes(ext)) {
+        parts.push({ type:'image', source:{ type:'base64', media_type:`image/${ext==='jpg'?'jpeg':ext}`, data: await toB64(f) }});
+        parts.push({ type:'text', text:`[Image: ${f.name}]` });
+      } else {
+        try { parts.push({ type:'text', text:`[File: ${f.name}]\n${(await toText(f)).slice(0,12000)}` }); }
+        catch { parts.push({ type:'text', text:`[File: ${f.name} – không đọc được]` }); }
+      }
+    }
+    parts.push({ type:'text', text:'Extract thông tin từ các chứng từ nhập khẩu trên và trả về JSON.' });
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:2000, system:SYSTEM_PROMPT, messages:[{role:'user',content:parts}] }),
+    });
+    const data = await resp.json();
+    const raw = (data.content||[]).map(c=>c.text||'').join('');
+    result = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    renderResults();
+  } catch(e) {
+    const eb = document.getElementById('err-box');
+    eb.textContent = '⚠ Lỗi: ' + e.message;
+    eb.style.display = 'block';
+  } finally {
+    document.getElementById('loading-overlay').classList.remove('show');
+  }
+}
+
+// ─── RENDER RESULTS ───────────────────────────────────────────────────────────
+function isHQ(v)    { return v === '[HQ/Hệ thống]'; }
+function isTra(v)   { return v && v.startsWith('[Tra:'); }
+function isSuyRa(v) { return v && v.includes('[suy ra]'); }
+function isEmpty(v) { return !v || v === ''; }
+
+function renderValue(key, v) {
+  if (isEmpty(v)) return '<span class="val-empty">—</span>';
+  if (isHQ(v))   return '<span class="tag tag-hq">🔒 HQ / Hệ thống tự cấp</span>';
+  if (isTra(v))  return `<span class="tag tag-tra">📌 ${v.replace(/^\[Tra:\s*/,'').replace(/\]$/,'')}</span>`;
+  const clean = isSuyRa(v) ? v.replace('[suy ra]','').trim() : v;
+  const suyTag = isSuyRa(v) ? '<span class="tag tag-suyra">↩ suy ra</span>' : '';
+  return `<div class="val-wrap"><span class="val-text">${clean}</span>${suyTag}<button class="copy-btn" id="cpbtn-${key}" onclick="copyField('${key}','${clean.replace(/'/g,"\\'").replace(/\n/g,' ')}')">⎘</button></div>`;
+}
+
+function countFilled(tab) {
+  if (!result) return null;
+  let total=0, filled=0;
+  tab.groups.forEach(g=>g.fields.forEach(f=>{ total++; const v=result[f.key]; if(v&&!isHQ(v)&&!isTra(v)) filled++; }));
+  return {filled,total};
+}
+
+function renderResults() {
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('results').style.display = 'block';
+
+  // Build tabs
+  const bar = document.getElementById('tabs-bar');
+  bar.innerHTML = TABS.map(t => {
+    const c = countFilled(t);
+    const countHtml = c ? `<span class="tab-count">${c.filled}/${c.total}</span>` : '';
+    return `<button class="tab-btn${t.id===activeTab?' active':''}" id="tab-${t.id}"
+      onclick="switchTab('${t.id}')"
+      style="color:${t.id===activeTab?t.color:'#3d5060'};border-color:${t.id===activeTab?t.color+'55':'#1a2838'}">
+      ${t.icon} ${t.label}${countHtml}
+    </button>`;
+  }).join('');
+
+  renderPanel();
+}
+
+function switchTab(id) {
+  activeTab = id;
+  TABS.forEach(t => {
+    const btn = document.getElementById('tab-'+t.id);
+    if (!btn) return;
+    if (t.id === id) {
+      btn.classList.add('active');
+      btn.style.color = t.color;
+      btn.style.borderColor = t.color+'55';
+      btn.style.borderBottom = '1px solid #0b1015';
+      btn.style.background = '#0b1015';
+    } else {
+      btn.classList.remove('active');
+      btn.style.color = '#3d5060';
+      btn.style.borderColor = '#1a2838';
+      btn.style.borderBottom = 'none';
+      btn.style.background = '#070a0f';
+    }
+  });
+  renderPanel();
+}
+
+function renderPanel() {
+  const tab = TABS.find(t=>t.id===activeTab);
+  const panel = document.getElementById('panel');
+  panel.style.display = 'block';
+  panel.style.border = `1px solid ${tab.color}33`;
+
+  document.getElementById('panel-title').textContent = `${tab.icon} ${tab.label.toUpperCase()}`;
+  document.getElementById('panel-title').style.color = tab.color;
+  document.getElementById('panel-hint').textContent = tab.hint;
+
+  const copyBtn = document.getElementById('copy-tab-btn');
+  copyBtn.style.background = tab.color+'11';
+  copyBtn.style.borderColor = tab.color+'44';
+  copyBtn.style.color = tab.color;
+
+  document.getElementById('panel-body').innerHTML = tab.groups.map((g,gi) => `
+    <div class="group-wrap">
+      <div class="group-title" style="color:${tab.color};border-bottom-color:${tab.color}22">${g.title}</div>
+      <table>
+        <tbody>
+          ${g.fields.map((f,fi) => `
+            <tr>
+              <td class="label-col">
+                <div class="field-label">${f.label}</div>
+                ${f.note ? `<div class="field-note">${f.note}</div>` : ''}
+              </td>
+              <td class="val-col">${renderValue(f.key, result ? result[f.key] : '')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+}
+
+function copyField(key, val) {
+  navigator.clipboard.writeText(val);
+  const btn = document.getElementById('cpbtn-'+key);
+  if (btn) { btn.textContent='✓'; btn.classList.add('done'); }
+  setTimeout(()=>{ if(btn){btn.textContent='⎘';btn.classList.remove('done');} }, 1500);
+}
+
+function copyTab() {
+  if (!result) return;
+  const tab = TABS.find(t=>t.id===activeTab);
+  const lines = tab.groups.flatMap(g=>g.fields.map(f=>`${f.label}: ${result[f.key]||'—'}`)).join('\n');
+  navigator.clipboard.writeText(lines);
+  const btn = document.getElementById('copy-tab-btn');
+  btn.textContent = '✓ COPIED';
+  setTimeout(()=>btn.textContent='📋 COPY TAB', 1500);
+}
+</script>
+</body>
+</html>
